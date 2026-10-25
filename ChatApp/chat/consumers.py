@@ -88,6 +88,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }))
             return
 
+        if not isinstance(data, dict):
+            await self.send(text_data=json.dumps({
+                "error": "Message must be a JSON object."
+            }))
+            return
+
         # ---- Typing event (message save nahi hota) ----
         if data.get("type") == "typing":
             await self.channel_layer.group_send(
@@ -100,6 +106,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "is_typing": bool(data.get("is_typing")),
                 },
             )
+            return
+
+        if data.get("type") == "sync_messages":
+            after_id = data.get("after_id")
+            if (
+                isinstance(after_id, bool)
+                or not isinstance(after_id, int)
+                or after_id < 0
+            ):
+                await self.send(text_data=json.dumps({
+                    "error": "after_id must be a non-negative integer."
+                }))
+                return
+
+            sync_result = await self.get_messages_after(after_id)
+            await self.send(text_data=json.dumps({
+                "type": "message_sync",
+                **sync_result,
+            }))
             return
 
         # ---- Normal message (pehle jaisa hi) ----
@@ -199,11 +224,47 @@ class ChatConsumer(AsyncWebsocketConsumer):
         timestamp = timezone.localtime(message.timestamp)
 
         return {
+            "id": message.id,
             "message": message.content,
             "username": self.user.username,
             "user_id": self.user.id,
-                        "timestamp": (
+            "timestamp": (
                 f"{timestamp:%b %d, %Y} · "
                 f"{timestamp.hour % 12 or 12}:{timestamp:%M %p}"
+            ),
+        }
+
+    @database_sync_to_async
+    def get_messages_after(self, after_id):
+        messages = list(
+            Message.objects.filter(
+                room__slug=self.room_slug,
+                id__gt=after_id,
+            )
+            .select_related("sender")
+            .order_by("id")[:201]
+        )
+        has_more = len(messages) > 200
+        messages = messages[:200]
+
+        serialized_messages = []
+        for message in messages:
+            timestamp = timezone.localtime(message.timestamp)
+            serialized_messages.append({
+                "id": message.id,
+                "message": message.content,
+                "username": message.sender.username,
+                "user_id": message.sender_id,
+                "timestamp": (
+                    f"{timestamp:%b %d, %Y} · "
+                    f"{timestamp.hour % 12 or 12}:{timestamp:%M %p}"
+                ),
+            })
+
+        return {
+            "messages": serialized_messages,
+            "has_more": has_more,
+            "next_after_id": (
+                serialized_messages[-1]["id"] if serialized_messages else after_id
             ),
         }

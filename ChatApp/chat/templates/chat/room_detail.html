@@ -589,11 +589,11 @@
     const roomSlug = messagesContainer.dataset.roomSlug;
     const currentUserId = Number("{{ user.id }}");
 
-    let lastSeenMessageId = Math.max(
-        0,
-        ...Array.from(
-            messagesContainer.querySelectorAll(".message-row[data-message-id]")
-        ).map(row => Number(row.dataset.messageId) || 0)
+    let lastSeenMessageId = Array.from(
+        messagesContainer.querySelectorAll(".message-row[data-message-id]")
+    ).reduce(
+        (lastId, row) => Math.max(lastId, Number(row.dataset.messageId) || 0),
+        0
     );
 
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -601,6 +601,7 @@
 
     let socket = null;
     let socketReady = false;
+    let syncCursor = lastSeenMessageId;
     let pendingMessage = null;
     let sendTimeout = null;
 
@@ -819,6 +820,16 @@
         sendButton.disabled = !socketReady;
     }
 
+    function requestMessageSync(afterId) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+        syncCursor = afterId;
+        socket.send(JSON.stringify({
+            type: "sync_messages",
+            after_id: syncCursor
+        }));
+    }
+
     function connectSocket() {
         if (reconnectAttempts === 0) {
             setStatus("Connecting to chat...", "warn");
@@ -838,10 +849,8 @@
             messageInput.focus();
             scrollToBottom(false);
 
-            socket.send(JSON.stringify({
-                type: "sync_messages",
-                after_id: lastSeenMessageId
-            }));
+            syncCursor = lastSeenMessageId;
+            requestMessageSync(syncCursor);
 
             if (wasReconnected) {
                 setStatus("Reconnected. Syncing missed messages...", "ok");
@@ -882,6 +891,9 @@
                         msg.id
                     );
                 });
+                if (data.has_more && Number.isFinite(Number(data.next_after_id))) {
+                    requestMessageSync(Number(data.next_after_id));
+                }
                 return;
             }
 

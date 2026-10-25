@@ -1,0 +1,24 @@
+﻿# Python virtual environments
+**/venv/
+**/.venv/
+
+# Python cache
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local database
+ChatApp/db.sqlite3
+
+# Local project archives
+ChatApp/manage.zip
+/Connectly_Project.zip
+
+# OS files
+.DS_Store
+Thumbs.db
