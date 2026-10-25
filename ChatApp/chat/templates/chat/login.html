@@ -1,0 +1,25 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Connectly</title>
+</head>
+<body>
+    <h1>Welcome Back! 👋</h1>
+
+    <form method="POST">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Login</button>
+    </form>
+
+    <p>
+        New to Connectly?
+        <a href="{% url 'chat:signup' %}">Create an account</a>
+    </p>
+
+    <a href="{% url 'chat:room_list' %}">Back to rooms</a>
+</body>
+</html>
